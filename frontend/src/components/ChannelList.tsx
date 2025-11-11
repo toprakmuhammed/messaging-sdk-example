@@ -11,6 +11,17 @@ export function ChannelList() {
     console.log('Channels updated:', channels);
   }, [channels]);
 
+  // Auto-refresh channels every 60 seconds when component is mounted
+  useEffect(() => {
+    if (!isReady) return;
+
+    const interval = setInterval(() => {
+      fetchChannels();
+    }, 60000); // 60 seconds
+
+    return () => clearInterval(interval);
+  }, [isReady, fetchChannels]);
+
   return (
     <Card>
       <Flex direction="column" gap="3">
@@ -151,7 +162,7 @@ export function ChannelList() {
           <>
             <Separator size="4" />
             <Text size="1" color="gray">
-              Auto-refreshes every 10 seconds • {channels.length} channel{channels.length !== 1 ? 's' : ''}
+              Auto-refreshes every 60 seconds • {channels.length} channel{channels.length !== 1 ? 's' : ''}
             </Text>
           </>
         )}

@@ -28,9 +28,11 @@ jobs:
           version: 9
 
       - name: Install dependencies
+        working-directory: ./frontend
         run: pnpm install
 
       - name: Build static site
+        working-directory: ./frontend
         run: pnpm run build
 
       - name: Deploy to Walrus
@@ -38,7 +40,7 @@ jobs:
         with:
           SUI_ADDRESS: ${{ vars.SUI_ADDRESS }}
           SUI_KEYSTORE: ${{ secrets.SUI_KEYSTORE }}
-          DIST: dist
+          DIST: frontend/dist
           SUI_NETWORK: mainnet
           EPOCHS: 53
           WS_RESOURCES: ws-resources.json

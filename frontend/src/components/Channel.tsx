@@ -1,9 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
-import { Card, Flex, Text, Box, Button, TextField, Badge } from '@radix-ui/themes';
+import { Card, Flex, Text, Box, Button, TextField, Badge, IconButton } from '@radix-ui/themes';
+import { FileIcon, Cross2Icon } from '@radix-ui/react-icons';
 import { useMessaging } from '../hooks/useMessaging';
 import { useCurrentAccount } from '@mysten/dapp-kit';
 import { formatTimestamp, formatAddress } from '../utils/formatters';
 import { trackEvent, trackError, AnalyticsEvents } from '../utils/analytics';
+import { AttachmentDisplay } from './AttachmentDisplay';
+import { formatFileSize, getFileIcon } from '../utils/attachments';
 
 interface ChannelProps {
   channelId: string;
@@ -20,6 +23,7 @@ export function Channel({ channelId, onBack, onInteraction }: ChannelProps) {
     messages,
     getChannelById,
     fetchMessages,
+    fetchLatestMessages,
     sendMessage,
     isFetchingMessages,
     isSendingMessage,
@@ -30,27 +34,41 @@ export function Channel({ channelId, onBack, onInteraction }: ChannelProps) {
   } = useMessaging();
 
   const [messageText, setMessageText] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch channel and messages on mount
   useEffect(() => {
-    if (isReady && channelId) {
-      // Track channel open event
-      trackEvent(AnalyticsEvents.CHANNEL_OPENED, {
-        channel_id: channelId,
-      });
+    if (!isReady || !channelId) return;
 
-      getChannelById(channelId).then(() => {
+    // Track channel open event
+    trackEvent(AnalyticsEvents.CHANNEL_OPENED, {
+      channel_id: channelId,
+    });
+
+    let isMounted = true;
+
+    // Fetch channel and messages
+    getChannelById(channelId).then(() => {
+      if (isMounted) {
         fetchMessages(channelId);
-      });
+      }
+    });
 
-      // Auto-refresh messages every 10 seconds
-      const interval = setInterval(() => {
-        fetchMessages(channelId);
-      }, 10000);
+    // Auto-refresh messages every 60 seconds (only fetch new messages, don't replace existing)
+    const interval = setInterval(() => {
+      if (isMounted) {
+        fetchLatestMessages(channelId);
+      }
+    }, 60000);
 
-      return () => clearInterval(interval);
-    }
-  }, [isReady, channelId, getChannelById, fetchMessages]);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+    // Only re-run when channelId or isReady changes, not when functions change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, channelId]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -65,17 +83,20 @@ export function Channel({ channelId, onBack, onInteraction }: ChannelProps) {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!messageText.trim() || isSendingMessage) {
+    if ((!messageText.trim() && selectedFiles.length === 0) || isSendingMessage) {
       return;
     }
 
-    const result = await sendMessage(channelId, messageText);
+    const attachments = selectedFiles.length > 0 ? selectedFiles : undefined;
+    const result = await sendMessage(channelId, messageText, attachments);
     if (result) {
       setMessageText(''); // Clear input on success
+      setSelectedFiles([]); // Clear selected files
       // Track successful message send
       trackEvent(AnalyticsEvents.MESSAGE_SENT, {
         channel_id: channelId,
         message_length: messageText.length,
+        has_attachments: attachments ? attachments.length : 0,
       });
       // Track interaction for feedback
       if (onInteraction) {
@@ -87,6 +108,21 @@ export function Channel({ channelId, onBack, onInteraction }: ChannelProps) {
         channel_id: channelId,
       });
     }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      setSelectedFiles(prev => [...prev, ...files]);
+    }
+    // Reset input so same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleLoadMore = () => {
@@ -192,7 +228,14 @@ export function Channel({ channelId, onBack, onInteraction }: ChannelProps) {
                       <Text size="1" color="gray">
                         {isOwnMessage ? 'You' : formatAddress(message.sender)}
                       </Text>
-                      <Text size="2">{message.text}</Text>
+                      {message.text && <Text size="2">{message.text}</Text>}
+                      {message.attachments && message.attachments.length > 0 && (
+                        <Flex direction="column" gap="1" mt={message.text ? "2" : "0"}>
+                          {message.attachments.map((attachment, attIndex) => (
+                            <AttachmentDisplay key={attIndex} attachment={attachment} />
+                          ))}
+                        </Flex>
+                      )}
                       <Text size="1" color="gray">
                         {formatTimestamp(message.createdAtMs)}
                       </Text>
@@ -225,8 +268,56 @@ export function Channel({ channelId, onBack, onInteraction }: ChannelProps) {
 
       {/* Message Input */}
       <Box p="3" style={{ borderTop: '1px solid var(--gray-a3)' }}>
+        {/* Selected Files Preview */}
+        {selectedFiles.length > 0 && (
+          <Box mb="2" p="2" style={{ backgroundColor: 'var(--gray-a2)', borderRadius: 'var(--radius-2)' }}>
+            <Flex direction="column" gap="1">
+              {selectedFiles.map((file, index) => (
+                <Flex key={index} gap="2" align="center" justify="between">
+                  <Flex gap="2" align="center" style={{ flex: 1, minWidth: 0 }}>
+                    <Text size="3">{getFileIcon(file.type, file.name)}</Text>
+                    <Box style={{ flex: 1, minWidth: 0 }}>
+                      <Text size="2" style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {file.name}
+                      </Text>
+                      <Text size="1" color="gray">
+                        {formatFileSize(file.size)}
+                      </Text>
+                    </Box>
+                  </Flex>
+                  <IconButton
+                    size="1"
+                    variant="ghost"
+                    onClick={() => handleRemoveFile(index)}
+                    style={{ flexShrink: 0 }}
+                  >
+                    <Cross2Icon />
+                  </IconButton>
+                </Flex>
+              ))}
+            </Flex>
+          </Box>
+        )}
+
         <form onSubmit={handleSendMessage}>
           <Flex gap="2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={handleFileSelect}
+              style={{ display: 'none' }}
+              disabled={isSendingMessage || !isReady}
+            />
+            <IconButton
+              size="3"
+              variant="soft"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isSendingMessage || !isReady}
+            >
+              <FileIcon />
+            </IconButton>
             <TextField.Root
               size="3"
               placeholder="Type a message..."
@@ -238,7 +329,7 @@ export function Channel({ channelId, onBack, onInteraction }: ChannelProps) {
             <Button
               size="3"
               type="submit"
-              disabled={!messageText.trim() || isSendingMessage || !isReady}
+              disabled={(!messageText.trim() && selectedFiles.length === 0) || isSendingMessage || !isReady}
             >
               {isSendingMessage ? 'Sending...' : 'Send'}
             </Button>
