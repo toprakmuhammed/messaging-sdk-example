@@ -15,7 +15,6 @@ interface AttachmentDisplayProps {
 
 export function AttachmentDisplay({ attachment }: AttachmentDisplayProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDecrypting, setIsDecrypting] = useState(true);
 
@@ -39,12 +38,10 @@ export function AttachmentDisplay({ attachment }: AttachmentDisplayProps) {
           blobUrl = uint8ArrayToBlobUrl(data, attachment.mimeType);
           setImageUrl(blobUrl);
         }
-        setIsLoading(false);
         setIsDecrypting(false);
       } catch (err) {
         if (!isMounted) return;
         setError(err instanceof Error ? err.message : 'Failed to load attachment');
-        setIsLoading(false);
         setIsDecrypting(false);
       }
     };
@@ -132,7 +129,6 @@ export function AttachmentDisplay({ attachment }: AttachmentDisplayProps) {
               }}
               onError={() => {
                 setError('Failed to load image');
-                setIsLoading(false);
               }}
             />
             <Box
@@ -146,7 +142,7 @@ export function AttachmentDisplay({ attachment }: AttachmentDisplayProps) {
               }}
             >
               <Flex justify="between" align="center">
-                <Text size="1" color="white" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <Text size="1" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', color: 'white' }}>
                   {attachment.fileName}
                 </Text>
                 <Text size="1" color="gray" style={{ marginLeft: '8px' }}>

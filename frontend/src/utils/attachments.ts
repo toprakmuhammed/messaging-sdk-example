@@ -6,7 +6,7 @@
  * Convert Uint8Array to a Blob URL
  */
 export function uint8ArrayToBlobUrl(data: Uint8Array, mimeType: string): string {
-  const blob = new Blob([data], { type: mimeType });
+  const blob = new Blob([data as BlobPart], { type: mimeType });
   return URL.createObjectURL(blob);
 }
 
@@ -76,7 +76,7 @@ export function getFileIcon(mimeType: string, filename: string): string {
  * Create a download link for a file
  */
 export function createDownloadLink(data: Uint8Array, filename: string, mimeType: string): HTMLAnchorElement {
-  const blob = new Blob([data], { type: mimeType });
+  const blob = new Blob([data as BlobPart], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
